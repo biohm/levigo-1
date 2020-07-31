@@ -1608,10 +1608,10 @@ public class ItemDetailFragment extends Fragment {
                 HashMap<String, Object> notificationMessage = new HashMap<>();
                 notificationMessage.put("header", messageHeader);
                 notificationMessage.put("body", messageBody);
-                notificationMessage.put("hospital_id", "n1_hospital3");
+                notificationMessage.put("hospital_id", mHospitalId);
 
-                CollectionReference notifRef = db.collection("networks").document("network1").
-                        collection("sites").document("n1_hospital3").collection("notifications");
+                CollectionReference notifRef = db.collection("networks").document(mNetworkId)
+                        .collection("hospitals").document(mHospitalId).collection("notifications");
 
                 notifRef.add(notificationMessage).addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
                     @Override

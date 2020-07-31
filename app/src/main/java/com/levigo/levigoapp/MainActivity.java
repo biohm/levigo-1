@@ -158,13 +158,13 @@ public class MainActivity extends AppCompatActivity implements Serializable {
             }
         });
 
-        FirebaseMessaging.getInstance().subscribeToTopic("n1_hospital3")
+        FirebaseMessaging.getInstance().subscribeToTopic(mHospitalId)
                 .addOnCompleteListener(new OnCompleteListener<Void>() {
                     @Override
                     public void onComplete(@NonNull Task<Void> task) {
-                        String msg = "Successfully subscribed to n1_hospital3";
+                        String msg = "Successfully subscribed to " + mHospitalId;
                         if(!task.isSuccessful()){
-                            msg = "Error subscribing to n1_hospital3";
+                            msg = "Error subscribing to " + mHospitalId;
                         }
                         Log.d("TAG", msg);
                         Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show();
