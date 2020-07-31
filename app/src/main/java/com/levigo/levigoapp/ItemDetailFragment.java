@@ -1440,6 +1440,37 @@ public class ItemDetailFragment extends Fragment {
         if (itemUsed.isChecked()) {
             quantity_int = Integer.parseInt(itemQuantity) - totalUsed;
             diQuantity = String.valueOf(Integer.parseInt(diQuantity) - totalUsed);
+
+            //Create notification if value of diQuantity is below a certain number
+            int diQuantity_int = Integer.parseInt(diQuantity);
+
+            if(diQuantity_int <= 8){
+                String messageHeader = name_str + " are running low.";
+                String messageBody = "There are " + diQuantity + " " + name_str + " remaining.";
+
+                HashMap<String, Object> notificationMessage = new HashMap<>();
+                notificationMessage.put("header", messageHeader);
+                notificationMessage.put("body", messageBody);
+                notificationMessage.put("hospital_id", "n1_hospital3");
+
+                CollectionReference notifRef = db.collection("networks").document("network1").
+                        collection("sites").document("n1_hospital3").collection("notifications");
+
+                notifRef.add(notificationMessage).addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                    @Override
+                    public void onSuccess(DocumentReference documentReference) {
+                        Toast.makeText(getActivity(), "Notification Added", Toast.LENGTH_SHORT).show();
+                    }
+                }).addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Toast.makeText(getActivity(), "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+
+
+            }
+
         } else {
             number_added_str = Objects.requireNonNull(numberAdded.getText()).toString();
             quantity_int = Integer.parseInt(itemQuantity) +
@@ -1468,9 +1499,6 @@ public class ItemDetailFragment extends Fragment {
         int radioButtonInt = useRadioGroup.getCheckedRadioButtonId();
         RadioButton radioButton = view.findViewById(radioButtonInt);
         String singleOrMultiUse = radioButton.getText().toString();
-
-
-
 
 
         // saving di-specific identifiers using HashMap
