@@ -5,8 +5,7 @@
     android:layout_height="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:background="@color/colorBackground"
-    android:backgroundTint="@color/colorPrimaryDark"
-    android:theme="@style/Theme.MaterialComponents.Light.NoActionBar">
+    android:backgroundTint="@color/colorPrimaryDark">
 
     <LinearLayout
         android:layout_width="wrap_content"
@@ -22,6 +21,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:padding="16dp"
             android:text="@string/levigo_label"
             android:fontFamily="sans-serif-light"
             android:textColor="@android:color/white"

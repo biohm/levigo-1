@@ -24,7 +24,6 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Toast;
 
@@ -32,7 +31,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -42,10 +40,9 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
-import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.crashlytics.FirebaseCrashlytics;
 import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentReference;
@@ -53,6 +50,7 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
@@ -61,16 +59,12 @@ import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 import com.journeyapps.barcodescanner.CaptureActivity;
 
+import java.io.Serializable;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements Serializable {
 
     private static final String TAG = MainActivity.class.getSimpleName();
     private static final int RC_HANDLE_CAMERA_PERM = 1;
@@ -82,22 +76,40 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView inventoryScroll;
     private RecyclerView.Adapter iAdapter;
     private RecyclerView.LayoutManager iLayoutManager;
-    private Map<String, Object> entries = new HashMap<>();
+    private Map<String, Object> entries = new HashMap<String, Object>();
 
     private FloatingActionButton mAdd;
+
+    private Query query;
 
     // authorized hospital based on user
     private FirebaseAuth mAuth;
     private CollectionReference usersRef = levigoDb.collection("users");
     private String mNetworkId;
-    private String mNetworkName;
+    //    private String mNetworkName;
     private String mHospitalId;
     private String mHospitalName;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        /*
+        // Start of Crash button. Production only. Remove before publishing
+        Button crashButton = new Button(this);
+        crashButton.setText("Crash!");
+        crashButton.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View view) {
+                throw new RuntimeException("Test Crash"); // Force a crash
+            }
+        });
+        addContentView(crashButton, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        // End of crash button
+         */
 
         mAuth = FirebaseAuth.getInstance();
         String userId = mAuth.getCurrentUser().getUid();
@@ -115,18 +127,21 @@ public class MainActivity extends AppCompatActivity {
                     if (document.exists()) {
                         try {
                             mNetworkId = document.get("network_id").toString();
-                            mNetworkName = document.get("network_name").toString();
+//                            mNetworkName = document.get("network_name").toString();
                             mHospitalId = document.get("hospital_id").toString();
                             mHospitalName = document.get("hospital_name").toString();
-                            String inventoryRefUrl = "networks/" + mNetworkId + "/sites/" + mHospitalId + "/n1_h3_departments/department1/n1_h1_d1 productids";
+                            String inventoryRefUrl = "networks/" + mNetworkId + "/hospitals/" + mHospitalId + "/departments/default_department/dis";
 
                             Toolbar mToolbar = findViewById(R.id.main_toolbar);
                             setSupportActionBar(mToolbar);
                             mToolbar.setTitle(mHospitalName);
 
                             inventoryRef = levigoDb.collection(inventoryRefUrl);
+                            //query = inventoryRef.whereEqualTo("equipment_type", "Scalpel");
+
                             initInventory();
                         } catch (NullPointerException e) {
+                            FirebaseCrashlytics.getInstance().recordException(e);
                             toastMessage = "Error retrieving user information; Please contact support";
                             Toast.makeText(getApplicationContext(), toastMessage, Toast.LENGTH_SHORT).show();
                         }
@@ -195,7 +210,6 @@ public class MainActivity extends AppCompatActivity {
 
         inventoryScroll = findViewById(R.id.main_categories);
         mAdd = findViewById(R.id.main_add);
-        inventoryScroll.setHasFixedSize(true);
         mAdd.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -236,137 +250,99 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                assert queryDocumentSnapshots != null;
+                if (queryDocumentSnapshots == null) return;
                 for (DocumentChange dc : queryDocumentSnapshots.getDocumentChanges()) {
-                    final Map<String, Object> di = dc.getDocument().getData();
-                    final String type = di.get("equipment_type").toString();
-                    final String diString = di.get("di").toString();
-//                    Log.d(TAG, "Data di: " + di.toString());
-//                    Log.d(TAG, "UDIs: " + dc.getDocument().getReference().collection("UDIs"));
-                    //TODO: add cases
-                    Map<String, Object> types, dis, productid;
-                    switch (dc.getType()) {
-                        case ADDED:
-                            Log.d(TAG, "Added");
-                            dc.getDocument().getReference().collection("UDIs").addSnapshotListener(new EventListener<QuerySnapshot>() {
-                                @Override
-                                public void onEvent(@Nullable QuerySnapshot queryDocumentSnapshots, @Nullable FirebaseFirestoreException e) {
-                                    if (e != null) {
-                                        System.err.println("Listen failed: " + e);
-                                        return;
-                                    }
-                                    assert queryDocumentSnapshots != null;
+                    try {
+                        final Map<String, Object> di = dc.getDocument().getData();
+                        final String type = di.get("equipment_type").toString();
+                        final String diString = di.get("di").toString();
 
-
-                                    if (!entries.containsKey("Category1")) {
-                                        entries.put("Category1", new HashMap<>());
-                                    }
-                                    Map<String, Object> types = (HashMap<String, Object>) entries.get("Category1");
-                                    assert types != null;
-                                    if (!types.containsKey(type)) {
-                                        types.put(type, new HashMap<>());
-                                    }
-                                    Map<String, Object> dis = (HashMap<String, Object>) types.get(type);
-                                    assert dis != null;
-                                    if (!dis.containsKey(diString)) {
-                                        dis.put(diString, new HashMap<>());
-                                    }
-                                    Map<String, Object> productid = (HashMap<String, Object>) dis.get(diString);
-                                    assert productid != null;
-
-                                    if (!productid.containsKey("udis")) {
-                                        productid.put("udis", new HashMap<>());
-                                    }
-                                    Map<String, Object> udis = (HashMap<String, Object>) productid.get("udis");
-                                    assert udis != null;
-
-                                    for (DocumentChange dc : queryDocumentSnapshots.getDocumentChanges()) {
-                                        Map<String, Object> data = dc.getDocument().getData();
-                                        //TODO: make safe
-                                        String udi = data.get("udi").toString();
-                                        switch (dc.getType()) {
-                                            case ADDED:
-                                            case MODIFIED:
-                                                udis.put(udi, data);
-                                                break;
-                                            case REMOVED:
-                                                udis.remove(udi);
+                        //TODO: add cases
+                        Map<String, Object> types, dis, productid;
+                        switch (dc.getType()) {
+                            case ADDED:
+                                Log.d(TAG, "Added");
+                                dc.getDocument().getReference().collection("udis").addSnapshotListener(new EventListener<QuerySnapshot>() {
+                                    @Override
+                                    public void onEvent(@Nullable QuerySnapshot queryDocumentSnapshots, @Nullable FirebaseFirestoreException e) {
+                                        if (e != null) {
+                                            System.err.println("Listen failed: " + e);
+                                            return;
                                         }
-                                    }
 
-//                                    productid.put("udis", udis);
-//                                    Log.d(TAG, "ENTRIES: " + entries);
-                                    iAdapter.notifyDataSetChanged();
+                                        if (!entries.containsKey("Category1")) {
+                                            entries.put("Category1", new HashMap<>());
+                                        }
+                                        Map<String, Object> types = (HashMap<String, Object>) entries.get("Category1");
+                                        if (!types.containsKey(type)) {
+                                            types.put(type, new HashMap<>());
+                                        }
+                                        Map<String, Object> dis = (HashMap<String, Object>) types.get(type);
+                                        if (!dis.containsKey(diString)) {
+                                            dis.put(diString, new HashMap<>());
+                                        }
+                                        Map<String, Object> productid = (HashMap<String, Object>) dis.get(diString);
+                                        if (!productid.containsKey("udis")) {
+                                            productid.put("udis", new HashMap<>());
+                                        }
+                                        Map<String, Object> udis = (HashMap<String, Object>) productid.get("udis");
+
+                                        for (DocumentChange dc : queryDocumentSnapshots.getDocumentChanges()) {
+                                            Map<String, Object> data = dc.getDocument().getData();
+                                            //TODO: make safe
+                                            String udi = data.get("udi").toString();
+                                            switch (dc.getType()) {
+                                                case ADDED:
+                                                case MODIFIED:
+                                                    udis.put(udi, data);
+                                                    break;
+                                                case REMOVED:
+                                                    udis.remove(udi);
+                                            }
+                                        }
+                                        iAdapter.notifyDataSetChanged();
+                                    }
+                                });
+                            case MODIFIED:
+                                Log.d(TAG, "Modified");
+                                if (!entries.containsKey("Category1")) {
+                                    entries.put("Category1", new HashMap<>());
                                 }
-                            });
-                        case MODIFIED:
-                            Log.d(TAG, "Modified");
-                            if (!entries.containsKey("Category1")) {
-                                entries.put("Category1", new HashMap<>());
-                            }
-                            types = (HashMap<String, Object>) entries.get("Category1");
-                            assert types != null;
-                            if (!types.containsKey(type)) {
-                                types.put(type, new HashMap<>());
-                            }
-                            dis = (HashMap<String, Object>) types.get(type);
-                            assert dis != null;
-                            if (!dis.containsKey(diString)) {
-                                dis.put(diString, new HashMap<>());
-                            }
-                            productid = (HashMap<String, Object>) dis.get(diString);
-                            assert productid != null;
-                            productid.put("di", di);
-                            break;
-                        case REMOVED:
-                            Log.d(TAG, "Removed");
-                            if (!entries.containsKey("Category1")) {
-                                entries.put("Category1", new HashMap<>());
-                            }
-                            types = (HashMap<String, Object>) entries.get("Category1");
-                            assert types != null;
-                            if (!types.containsKey(type)) {
-                                types.put(type, new HashMap<>());
-                            }
-                            dis = (HashMap<String, Object>) types.get(type);
-                            assert dis != null;
-                            if (!dis.containsKey(diString)) {
-                                dis.put(diString, new HashMap<>());
-                            }
-                            productid = (HashMap<String, Object>) dis.get(diString);
-                            assert productid != null;
-                            productid.remove("di");
-                            break;
+                                types = (HashMap<String, Object>) entries.get("Category1");
+                                if (!types.containsKey(type)) {
+                                    types.put(type, new HashMap<>());
+                                }
+                                dis = (HashMap<String, Object>) types.get(type);
+                                if (!dis.containsKey(diString)) {
+                                    dis.put(diString, new HashMap<>());
+                                }
+                                productid = (HashMap<String, Object>) dis.get(diString);
+                                productid.put("di", di);
+                                break;
+                            case REMOVED:
+                                Log.d(TAG, "Removed");
+                                if (!entries.containsKey("Category1")) {
+                                    entries.put("Category1", new HashMap<>());
+                                }
+                                types = (HashMap<String, Object>) entries.get("Category1");
+                                if (!types.containsKey(type)) {
+                                    types.put(type, new HashMap<>());
+                                }
+                                dis = (HashMap<String, Object>) types.get(type);
+                                if (!dis.containsKey(diString)) {
+                                    dis.put(diString, new HashMap<>());
+                                }
+                                productid = (HashMap<String, Object>) dis.get(diString);
+                                productid.remove("di");
+                                break;
+                        }
+                        iAdapter.notifyDataSetChanged();
+                    } catch (NullPointerException npe) {
+                        FirebaseCrashlytics.getInstance().recordException(npe);
+                        String toastMessage = "Error 0001: Failed to retrieve inventory information; Please report to support if possible";
+                        Toast.makeText(getApplicationContext(), toastMessage, Toast.LENGTH_LONG).show();
                     }
-                    iAdapter.notifyDataSetChanged();
-//                    switch(dc.getType()) {
-//                        case ADDED:
-//                            Log.d(TAG, "added");
-//                            entries.add(entry);
-//                            break;
-//                        case REMOVED:
-//                            Log.d(TAG, "remove");
-//                            for(int i = 0; i < entries.size(); ++i) {
-//                                if(entries.get(i).get("di").equals(entry.get("di"))) {
-//                                    Log.d(TAG, "remove2");
-//                                    entries.remove(i);
-//                                    break;
-//                                }
-//                            }
-//                            break;
-//                        case MODIFIED:
-//                            Log.d(TAG, "modify");
-//                            for(int i = 0; i < entries.size(); ++i) {
-//                                if(entries.get(i).get("di").equals(entry.get("di"))) {
-//                                    Log.d(TAG, "modify2");
-//                                    entries.set(i,entry);
-//                                    break;
-//                                }
-//                            }
-//                            break;
-//                    }
                 }
-//                iAdapter.notifyDataSetChanged();
             }
         });
     }
@@ -389,7 +365,7 @@ public class MainActivity extends AppCompatActivity {
         if (result != null) {
             String contents = result.getContents();
             if (contents != null) {
-                startItemView(contents);
+               startItemView(contents);
 
             }
             if (result.getBarcodeImagePath() != null) {
@@ -426,8 +402,24 @@ public class MainActivity extends AppCompatActivity {
         fragmentTransaction.add(R.id.activity_main, fragment);
         fragmentTransaction.addToBackStack(null);
         fragmentTransaction.commit();
+    }
 
-//                mAdd.setVisibility(View.GONE);
+    public void startItemViewOnly(String barcode) {
+        ItemDetailViewFragment fragment = new ItemDetailViewFragment();
+        Bundle bundle = new Bundle();
+        bundle.putString("barcode", barcode);
+        fragment.setArguments(bundle);
+
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        //clears other fragments
+        fragmentManager.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+
+
+        FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
+        fragmentTransaction.setCustomAnimations(R.anim.fui_slide_in_right, R.anim.fui_slide_out_left);
+        fragmentTransaction.add(R.id.activity_main, fragment);
+        fragmentTransaction.addToBackStack(null);
+        fragmentTransaction.commit();
     }
 
 
@@ -470,9 +462,15 @@ public class MainActivity extends AppCompatActivity {
                 //TODO next step
 //                Toast.makeText(this, "Not implemented yet", Toast.LENGTH_SHORT).show();
                 return true;
+
+            case R.id.filter:
+                Log.d(TAG, "reached case filter");
+                Intent intent_filter = new Intent(getApplicationContext(), FilterActivity.class);
+                startActivity(intent_filter);
+                finish();
+                return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
     }
-
 }
